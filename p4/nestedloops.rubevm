@@ -1,7 +1,0 @@
-main:
-	int_sym r9, foo
-	int_sym r10, bar
-	const r1, 1
-	if_zero r0, _
-	add r0, r0, r1
-	

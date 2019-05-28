@@ -1,9 +1,0 @@
-
-main:
-  const   r0, 2
-  const   r1, 1
-  int_sym r4, alpha
-  add     r3, r0, r4
-  if_zero r3, 1
-  ret r3
-  ret     r3

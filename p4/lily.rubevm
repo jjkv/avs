@@ -1,6 +1,0 @@
-main:
-  int_sym r0, foo
-  add r0, r0, r0
-  const r1, 2
-  eq r0, r0, r1
-  ret r0

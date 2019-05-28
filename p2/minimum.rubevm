@@ -1,3 +1,0 @@
-main:
-	const r0, 0
-	ret r0

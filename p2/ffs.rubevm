@@ -1,9 +1,0 @@
-print_int:
-	const r8, 8
-	ret r8
-
-main:
-	const r3, length
-	const r4, "wow"
-	call r3, 4, 4
-	ret r4

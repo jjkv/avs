@@ -1,6 +1,0 @@
-main:
-	int_sym r0, h
-	const r1, 0
-	add r2, r0, r1
-	add r3, r0, r2
-	ret r3

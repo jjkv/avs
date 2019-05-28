@@ -1,8 +1,0 @@
-const r0, 4
-const r1, 3
-add r2, r0, r1
-if_zero r2, 3
-mul r3, r1, r2
-const r1000, 1000
-mul r3, r3, r1000
-const r4, 3
