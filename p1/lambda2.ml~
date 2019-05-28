@@ -1,0 +1,85 @@
+type lexpr =
+  | Var of string
+  | Lam of string * lexpr
+  | App of lexpr * lexpr
+
+let rec output_lexpr () = function
+  | Var x -> Printf.sprintf "%s" x
+  | Lam(x, e) -> Printf.sprintf "%s.%a" x output_lexpr e
+  | App(e1, e2) -> Printf.sprintf "(%a) (%a)" output_lexpr e1 output_lexpr e2
+
+let unparse = output_lexpr ()
+
+let rec free_vars e =
+  let rec setInsert x xs = (* setlike insert over lists*)
+    match xs with
+    | [] -> [x]
+    | (y::ys) -> if x = y then ys else y :: (setInsert x ys)
+  in (*set-like union over lists*)
+  let union xs ys = List.fold_right setInsert xs ys in
+  let rec delete x xs = (*set deletion over lists*)
+    match xs with
+    | [] -> []
+    | (y ::ys) -> if x = y  then ys else y :: delete x ys
+  in match e with
+     | Var x     -> [x]
+     | Lam (x,e) -> delete x (free_vars e)
+     | App (e1,e2) -> union (free_vars e1) (free_vars e2)
+
+
+let rec subst x e1 e2 =
+  let rec varsIn e = (*all vars in an expression e*)
+    match e with
+    | Var e -> [e]
+    | Lam (x,e') -> x :: varsIn e'
+    | App (f,e') -> List.append (varsIn f) (varsIn e') in
+  let rec boundVarsIn e = (*all bound vars in an expression e*)
+      match e with
+      | Var y -> []
+      | Lam (x,e')  -> x :: boundVarsIn e'
+      | App (f,e') -> List.append (boundVarsIn f) (boundVarsIn e')
+  in
+  let rec contains y ys = (*list membership *)
+    match ys with
+    | []      -> false
+    | (z::zs) -> (y = z) || contains y zs
+  in
+  let avoid = varsIn e1 in (*do not alpha rename free vars *)
+  let rec freshen e vars = (*alpha rename every bound var in e that collides with vars*)
+    match e with
+    | Var x -> if contains x vars then Var (x ^ "'") else Var x
+    | Lam (x,e') -> Lam ((x ^ "'"),freshen e' (x :: vars))
+    | App (f,e') -> App (freshen f vars, freshen e' vars)
+  in
+  match (e2, (List.fold_right (fun v acc -> acc || contains v avoid) (boundVarsIn e2) false)) with
+  | _, true       -> subst x e1 (freshen e2 []) (*oh no! e1 and e2 share bound vars. freshen! *)
+  | Var z,_       -> if z = x then e1 else Var z (*subst*)
+  | Lam (z,e'),_  -> if z = x then Lam (z,e') else Lam (z,subst x e1 e') (*recurse if not shadowed*)
+  | App (f,e'),_  -> App (subst x e1 f, subst x e1 e') (*recurse on subexps*)
+
+
+let rec beta e =
+  match e with
+  | Var _ -> None     (*normal form*)
+  | Lam (_,_) -> None (*normal form*)
+  | App (e1,e2) ->
+      match (e1, beta e1, beta e2) with
+      | _,Some e1', _  -> Some (App (e1', e2)) (*reduce f*)
+      | _,_ , Some e2' -> Some (App (e1,e2'))  (*reduce e*)
+      | Lam (x,e'),_,_ -> Some (subst x e2 e') (*redux subst*)
+      | _,_,_          -> None                 (*normal form *)
+
+let rec normal_form e =
+  match beta e with
+  | None -> e
+  | Some e' -> normal_form e' (* repeatedly apply beta until done *)
+
+let lexpr_of_int n =
+  let rec lexpr_of_int' n' acc =
+    match n' with
+    | 0 -> acc (*x*)
+    | i -> lexpr_of_int' (i-1) (App (Var "f", acc)) (* f(f(f...)) *)
+  in Lam ("f", (Lam ("x", lexpr_of_int' n (Var "x"))))
+
+let add e1 e2 = (*faithful encoding of slides*)
+  Lam ("x", Lam ("y", App (App (e1,Var "x"), App (App (e2,Var "x"), Var "y"))))

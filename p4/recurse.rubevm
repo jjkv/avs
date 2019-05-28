@@ -1,0 +1,17 @@
+f2:
+	const r1, f1
+	int_sym r2, foo
+	call r1, 2, 2
+	ret r2
+
+f1:
+	const r1, f2
+	call r1, 1, 0
+	ret r1
+
+main:
+	const r1, f1
+	call r1, 1, 0
+	ret r1
+	
+	

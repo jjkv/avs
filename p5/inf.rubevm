@@ -1,0 +1,30 @@
+main:
+  rd_glob r0, a
+  rd_glob r1, b
+  rd_glob r2, c
+  add r3, r0, r1
+  const r5, 1
+  add r2, r2, r5
+  # Now the fun part
+  const r4, 0
+  eq r6, r4, r3
+  if_zero r6, 1
+  ret r2
+  eq r7, r4, r2
+  if_zero r7, 1
+  ret r3
+  add r4, r4, r5
+  jmp -8
+  ret r0
+
+harness:
+  rd_glob r0, a
+  rd_glob r1, b
+  rd_glob r2, c
+  add r3, r0, r1
+  const r5, 1
+  add r2, r2, r5
+  leq r4, r3, r2
+  if_zero r4, 1
+  ret r2
+  ret r3

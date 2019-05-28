@@ -1,0 +1,8 @@
+main:
+  int_sym r0, foo
+  const r5, 5
+  const r6, 6
+  add r2, r0, r6
+  eq r3, r2, r5
+  assert_zero r3
+  ret r3

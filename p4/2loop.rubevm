@@ -1,0 +1,12 @@
+main:
+  int_sym r0, x
+  const r1, 1
+  const r5, 5
+  add r0, r0, r1
+  eq  r9, r0, r5
+  if_zero r9, -3
+  const r10, 0
+  eq r8, r10, r9
+  assert_zero r8
+  ret r0
+  

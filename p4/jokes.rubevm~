@@ -1,0 +1,60 @@
+telljoke: 
+    const r3, "Knock Knock\n"
+    const r4, ">> Who's there?\n"
+    
+    mov r5, r0
+    const r6, "\n"
+    const r8, concat
+    call r8, 5, 6 
+    
+    const r6, ">> "
+    mov r7, r0
+    call r8, 6, 7
+    if_zero r2, 2
+        const r7, " who?\n"
+        call r8, 6, 7
+  
+    
+    const r8, print_string
+    call r8, 3, 3
+    call r8, 4, 4
+    call r8, 5, 5
+    call r8, 6, 6
+    call r8, 1, 1
+    const r0, "BEEP BOOP BEEP"
+    ret r0
+
+turing:
+    const r0, "Ima"
+    const r1, "Ima totally going to pass this turing test!\n\n\n"
+    int_sym r2, ha
+    const r3, telljoke
+    call r3, 0, 2
+    ret r0
+
+interrupt:
+    const r0, "Interrupting Program"
+    const r1, " w--\n"
+    int_sym r2, um
+    const r3, telljoke
+    call r3, 0, 2
+    ret r1
+
+failure:
+   const r1, "I MADE IT"
+   assert_zero r0
+   ret r1
+   
+main:
+    int_sym r0, heh
+    const r1, turing
+    const r2, interrupt
+    const r3, failure
+    if_zero r0, 3
+    call r1, 1, 1
+    call r3, 0, 0 
+    ret r0
+    call r2, 1, 1
+    call r3, 0, 0 
+    ret r0    
+ 

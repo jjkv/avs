@@ -1,0 +1,7 @@
+main:
+  int_sym r0, meow
+  if_zero r0, 2
+  const r0, "nOt ZeRo"
+  ret r0
+  const r0, "zErO"
+  ret r0

@@ -1,0 +1,10 @@
+main:
+  mk_tab r0
+  wr_tab r0, r0, r0
+  rd_tab r1, r0, r0
+  eq r0, r0, r1
+  if_zero r0, 2
+  const r0, "eQuAl"
+  ret r0
+  const r0, "nOt EqUaL"
+  ret r0

@@ -1,0 +1,41 @@
+# r0 % r1
+mod:
+  div r2, r0, r1
+  mul r4, r2, r1
+  sub r2, r0, r4
+  ret r4
+
+odd_collatz:
+  const r1, 1
+  eq r2, r1, r0
+  if_zero r2, 6
+  const r2, collatz
+  const r7, 1
+  const r8, 3
+  mul r0, r0, r8
+  add r0, r0, r8
+  call r2, 0, 0
+  halt r0
+
+even_collatz:
+  const r41, 2
+  div r0, r0, r41
+  const r2, collatz
+  call r2, 0, 0
+
+#r0 contains number
+collatz:
+  const r1, 2
+  mov r3, r0
+  const r99, mod
+  call r99, 0, 1
+  if_zero r0, 1
+  const r11, odd_collatz
+  const r11, even_collatz
+  call r11, 0, 0
+  
+
+main:
+  const r0, 4
+  const r1, collatz
+  call r1, 0, 0

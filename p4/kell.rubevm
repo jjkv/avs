@@ -1,0 +1,7 @@
+main:
+  int_sym r1, foo
+  int_sym r0, foo
+  const r1, 0
+  if_zero r1, 1
+  assert_zero r0
+  ret r0

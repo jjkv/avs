@@ -1,0 +1,16 @@
+fib:
+    const r1, 1 // [r1] := acc 
+    const r2, 1 // keep the value of r2 to be 1
+    if_zero r0, 6
+    mul r1, r0, r1 // acc <- n * acc
+    sub r0, r0, r2 // n <- n - 1
+    jmp 2
+    ret r1
+
+main:
+    const r0, print_int
+    const r1, fib
+    const r2, 20
+    call r1, r2, r2
+    call r0, r2, r2
+    halt r2

@@ -1,0 +1,10 @@
+harness:
+	const r0, 1
+	if_zero r0, 2
+	const r1, 1
+	ret r1
+	const r1, 0
+	ret r1
+main:
+	const r0, 0
+	ret r0

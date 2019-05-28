@@ -1,0 +1,7 @@
+harness:
+	const r0, 7
+	ret r0
+
+main:
+	const r0, h1
+	ret r0

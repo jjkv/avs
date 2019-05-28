@@ -1,0 +1,19 @@
+main:
+	rd_glob r0, a
+	const r1, h1
+	if_zero r0, 1
+	ret r0
+	add r0, r0, r1
+	if_zero r0, 1
+	jmp -3
+	ret r0
+
+harness:
+	rd_glob r0, a
+	const r1, 1
+	if_zero r0, 1
+	ret r0
+	add r0, r0, r1
+	if_zero r0, 1
+	jmp -3
+	ret r0

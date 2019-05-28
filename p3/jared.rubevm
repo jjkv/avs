@@ -1,0 +1,6 @@
+add r7, r1, r2
+if_zero r7, 0
+jmp 2
+add r7, r5, r6
+add r4, r5, r6
+add r3, r4, r6

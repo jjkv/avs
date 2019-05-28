@@ -1,0 +1,13 @@
+
+main:
+  const   r0, 0
+  add     r0, r0, r0
+  if_zero r0, 0
+  int_sym r1, foo
+  add     r2, r1, r1
+  const   r4, 4
+  eq      r3, r2, r4
+  eq      r5, r3, r0
+  if_zero r5, 0
+  ret     r5
+

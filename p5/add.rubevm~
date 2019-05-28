@@ -1,0 +1,11 @@
+main:
+	rd_glob r0, a
+	const r1, h1
+	add r2, r1, r0
+	ret r2
+
+harness:
+	rd_glob r0, a
+	const r1, 1
+	add r2, r1, r0
+	ret r2

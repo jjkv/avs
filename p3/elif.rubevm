@@ -1,0 +1,6 @@
+const r3, 7                
+if_zero r3, 2
+sub r3, r3, r1               
+jmp -3
+const r1, print_string 
+const r2, "it's been seven"

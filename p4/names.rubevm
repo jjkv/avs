@@ -1,0 +1,7 @@
+main:
+  int_sym r0, test
+  int_sym r1, test
+  int_sym r2, test
+  if_zero r1, 1
+  ret r2
+  ret r0
