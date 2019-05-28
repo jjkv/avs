@@ -1,0 +1,3 @@
+main:
+	int_sym r0, a
+	ret r0

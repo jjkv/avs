@@ -1,0 +1,290 @@
+(* jack kerns - avs project 4 - fall 2018 *)
+
+open Instr
+open Boolean
+open Bvec
+
+let print_result o = function
+  | `Full (v, b) -> Printf.fprintf o "Reg: %a; Path: %a" Disassembler.value v Disassembler.bexpr b
+  | `Partial b -> Printf.fprintf o "Partial: %a" Disassembler.bexpr b
+  | `Failure b -> Printf.fprintf o "Failure: %a" Disassembler.bexpr b
+
+let rec print_results o = function
+  | [] -> ()
+  | [r] -> print_result o r
+  | r::rs -> Printf.fprintf o "%a\n%a" print_result r print_results rs
+
+let print_bvec (bv:bvec):bvec =
+    let _ = Printf.printf "bvec: " in
+    let ptrue () = Printf.printf "%d" 1 in
+    let pfalse () = Printf.printf "%d" 0 in
+    let psat = (function None -> Printf.printf "x" | Some _ -> Printf.printf "?") in
+    let _ = List.map (function | ETrue -> ptrue () | EFalse -> pfalse () | x -> psat (Boolean.sat x)) bv 
+    in bv
+
+let print_reg k v =
+        let _ = Printf.printf "key: %d, " k in
+        (match v with
+            | `L_Int x -> Printf.printf "val: %d\n" x
+            | `L_Str x -> Printf.printf "val: %s\n" x 
+            | `L_Id x -> Printf.printf "val: %s\n" x
+            | `L_Sym x -> let _ = print_bvec x 
+                          in  Printf.printf "\n")  
+
+let print_regs r = Hashtbl.iter print_reg r
+
+exception TheRoof
+let error_out () = raise TheRoof
+
+let rec normalize (b : bexpr) : bexpr =
+  let rec normalize' = function
+    | EAnd (EFalse,_)  | EAnd (_, EFalse)  | ENot ETrue  | EFalse -> EFalse
+    | EOr (ETrue,_)    | EOr (_, ETrue)    | ENot EFalse | ETrue  -> ETrue
+    | EOr (EFalse, b)  | EOr (b, EFalse)   | EAnd (ETrue, b) | EAnd (b, ETrue) 
+        -> normalize' b
+    | EAnd (b1, b2) ->
+        let norm_b1     = normalize' b1
+        in let norm_b2  = normalize' b2
+        in if b1 = b2 
+           then norm_b1 
+           else (match b1, b2 with
+                 ENot b1', ENot b2' ->  ENot (EOr (normalize' b1', normalize' b2'))
+               | ENot b1', _        -> if b1' = b2 then EFalse else EAnd(norm_b1, norm_b2)
+               | _,     ENot b2'    -> if b1 = b2' then EFalse else EAnd(norm_b1, norm_b2)
+               | _                  -> EAnd(norm_b1, norm_b2))
+  | EOr (b1, b2) ->
+        let norm_b1     = normalize' b1
+        in let norm_b2  = normalize' b2
+        in if b1 = b2 
+           then norm_b1 
+           else (match b1, b2 with
+                 ENot b1', ENot b2' -> ENot (EAnd (normalize' b1', normalize' b2'))
+               | ENot b1', _        -> if b1' = b2 then ETrue else EOr(norm_b1, norm_b2)
+               | _,     ENot b2'    -> if b1 = b2' then ETrue else EOr(norm_b1, norm_b2)
+               | _                  -> EOr(norm_b1, norm_b2))
+    | ENot (ENot b')   -> (normalize' b')
+    | ENot b'          -> ENot (normalize' b')
+    | EForall (x,e)    -> EForall (x, normalize' e)
+    | EExists (x,e)    -> EExists (x, normalize' e)
+    | EVar x           -> EVar x
+  in let new_bool = normalize' b
+  in if new_bool = b then b else normalize new_bool
+
+type prog_ret = [ `Full of value * bexpr | `Partial of bexpr | `Failure of bexpr ]
+
+type inst_ret = [ `Normal of config | `Failure of bexpr | `Branch of (config * config) | `Return of (config * value)]
+
+let vars = Hashtbl.create 1738
+
+let sym_var s =
+    let s', n = (match Hashtbl.find_opt vars s with
+                     | None   -> s ^ "_0_", 0
+                     | Some x -> s ^ "_" ^ (string_of_int (x + 1)) ^ "_", x + 1) in
+    let _ = Hashtbl.replace vars s n
+    in List.map (fun x -> EVar (s' ^ (string_of_int x))) [0;1;2] 
+
+let current_inst (p:prog) ((s, path):config):instr = 
+    (match s with
+        [] -> error_out ()
+      | ((cid, cpc, regs)::rest) -> 
+            let f = Hashtbl.find p cid in
+            let i = Array.get f cpc in i)
+
+let run_inst (p:prog) ((s, path):config):inst_ret =
+    let to_bool = (function true -> 1 | false -> 0) in
+    let inv3 b:bvec = 
+        let xs = (match b with
+             | a::b::c::_ -> [a;b;c]
+             | a::b::[] -> [a;b;EFalse]
+             | a::[] -> [a;EFalse;EFalse]
+             | [] -> [EFalse;EFalse;EFalse])
+        in (List.map normalize xs) in
+    let mixed_ap v1 v2 int_op bvops =
+        (match bvops with
+             | None -> 
+               let x, y = (function `L_Int x, `L_Int y -> x, y 
+                                  | _ -> error_out ()) (v1, v2)
+               in `L_Int (int_op x y)
+             | Some (bv_op, bv_proc) ->
+               (match (v1, v2) with
+                    | (`L_Int x, `L_Int y) -> `L_Int (int_op x y)
+                    | (`L_Int x, `L_Sym y) ->  bv_proc (bv_op y (inv3 (Bvec.bvec_of_int x)))
+                    | (`L_Sym x, `L_Int y) ->  bv_proc (bv_op x (inv3 (Bvec.bvec_of_int y)))
+                    | (`L_Sym x, `L_Sym y) ->  bv_proc (bv_op x y)
+                    | (       _,        _) ->  error_out ())) in
+    (match s with 
+      | [] -> error_out () 
+      | ((cid, cpc, regs)::rest) ->
+        let std_ret rgs = `Normal ((cid, 1 + cpc, rgs)::rest, normalize path) in
+        let src_vals r r' = (Hashtbl.find regs r, Hashtbl.find regs r') in
+        let arith_inst r1 r2 r3 iop bfs = 
+            let v1, v2 = src_vals r2 r3 in
+            let v'     = mixed_ap v1 v2 iop bfs in
+            let _      = Hashtbl.replace regs r1 v' 
+            in std_ret regs
+        in (match (current_inst p (s, path)) with
+            | I_const (`L_Reg r, v) -> 
+                let _ = Hashtbl.replace regs r v in std_ret regs
+            | I_mov (`L_Reg r1, `L_Reg r2) -> 
+                let _ = Hashtbl.replace regs r1 (Hashtbl.find regs r2) 
+                in std_ret regs
+            | I_add (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> x + y) (Some (Bvec.add, (fun x -> `L_Sym (inv3 x))))
+            | I_sub (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> x - y) None
+            | I_mul (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> x * y) None
+            | I_div (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> x / y) None
+            | I_eq (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> to_bool (x = y)) (Some (Bvec.eq, (fun x -> `L_Sym (inv3 [x]))))
+            | I_lt (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> to_bool (x < y)) None
+            | I_leq (`L_Reg r1, `L_Reg r2, `L_Reg r3) ->
+                arith_inst r1 r2 r3 (fun x y -> to_bool (x <= y)) None
+            | I_is_int (`L_Reg r1, `L_Reg r2) ->
+                let v' = (match Hashtbl.find regs r2 with
+                              | `L_Int _ -> `L_Int 1
+                              | `L_Sym _ -> `L_Int 1
+                              |        _ -> `L_Int 0) in
+                let _ = Hashtbl.replace regs r1 v' in
+                `Normal ((cid, 1 + cpc, regs)::rest, path)
+            | I_is_str (`L_Reg r1, `L_Reg r2) ->
+                let v' = (match Hashtbl.find regs r2 with
+                              | `L_Str _ -> `L_Int 1
+                              |        _ -> `L_Int 0) in
+                let _ = Hashtbl.replace regs r1 v' in
+                std_ret regs
+            | I_jmp n -> `Normal ((cid, cpc + n + 1, regs)::rest, path)
+            | I_if_zero (`L_Reg r, n) ->
+                let z_conf  = ((cid, cpc + n + 1, Hashtbl.copy regs)::rest) in
+                let nz_conf = ((cid, cpc + 1    , Hashtbl.copy regs)::rest) in
+                (match (Hashtbl.find regs r) with
+                     | `L_Int 0 -> `Normal (z_conf, path)
+                     | `L_Sym x -> 
+                          let z_path   = normalize (EAnd (path, Bvec.zero x)) in
+                          let zp_soln  = Boolean.sat z_path in
+                          let nz_path  = normalize (EAnd (path, ENot (Bvec.zero x))) in
+                          let nzp_soln = Boolean.sat nz_path 
+                          in (match (zp_soln, nzp_soln) with
+                                  | (Some _, Some _) -> `Branch ((z_conf, z_path), (nz_conf, nz_path))
+                                  | (Some _, None  ) -> `Normal  (z_conf, z_path)
+                                  | (None,   Some _) -> `Normal  (nz_conf, nz_path)
+                                  | (None,   None  ) -> `Failure path)
+                     | _ -> `Normal (nz_conf, path))
+            | I_call (`L_Reg r, n1, n2) ->
+                let nid = (function `L_Id x -> x | _ -> error_out ()) (Hashtbl.find regs r)
+                in (match (Hashtbl.find_opt p nid) with                                
+                    | Some _ ->
+                        if n1 > n2 then `Normal ((nid, 0, (Hashtbl.create 11))::(cid, cpc, (Hashtbl.copy regs))::rest, path) else
+                        let r2 = (Hashtbl.create 1738) in
+                        let diff = n2 - n1 in
+                        let rec mk_bindings i t =
+                            let v' = Hashtbl.find regs (n1 + i) in 
+                            let _ = Hashtbl.replace t i v' in
+                            if (i = diff) then t
+                            else mk_bindings (i + 1) t in
+                        let r2' = mk_bindings 0 r2 in
+                        let s' = (nid, 0, r2')::(cid, cpc, (Hashtbl.copy regs))::rest 
+                        in `Normal (s', path)
+                    | None -> let ret =
+                        (match nid with
+                            "print_string" -> 
+                                let v  = Hashtbl.find regs n1 in
+                                let v' = (function `L_Str x -> x | _ -> error_out ()) v in
+                                let _  = Printf.printf "%s" v'
+                                in Some (`L_Str v')
+                          | "print_int" ->
+                                let v  = Hashtbl.find regs n1 in
+                                let v' = (function `L_Int x -> x | _ -> error_out ()) v in
+                                let _  = Printf.printf "%d" v'
+                                in Some (`L_Int v')
+                          | "to_s" -> 
+                                let arg = Hashtbl.find regs n1 in
+                                let convert a = (match a with
+                                    | (`L_Int x) -> `L_Str (string_of_int x)
+                                    | (`L_Str _) -> a 
+                                    | (`L_Id x) -> `L_Str ("Function<"^x^">")
+                                    | (`L_Sym x) -> error_out ()
+                                    | _ -> error_out ())
+                                in Some (convert arg)
+                          | "to_i" -> 
+                                let arg = Hashtbl.find regs n1 in
+                                let convert a = (match a with
+                                    | (`L_Int _) -> a
+                                    | (`L_Str x) -> `L_Int (int_of_string x)
+                                    | (`L_Id x) -> `L_Int (int_of_string x)
+                                    | (`L_Sym _) -> error_out ()
+                                    | _ -> error_out ())
+                                in Some (convert arg)
+                          | "concat" ->
+                                let s1 = Hashtbl.find regs n1 in
+                                let s2 = Hashtbl.find regs n2
+                                in (match (s1, s2) with 
+                                    ((`L_Str x), (`L_Str y)) -> Some (`L_Str (x ^ y))
+                                    | _ -> error_out ())
+                          | "length" -> 
+                                let s = (assert (n1 = n2)); (Hashtbl.find regs n1)
+                                in (match s with
+                                    | `L_Str x -> Some (`L_Int (String.length x))
+                                    | _ -> error_out ())
+                          | _ -> None)
+                    in (match ret with
+                            Some x -> 
+                                let _ = Hashtbl.replace regs n1 x
+                                in `Normal ((cid, 1 + cpc, regs)::rest, path)
+                          | None -> error_out ()))
+            | I_ret (`L_Reg r) ->
+                (match s with 
+                    [] -> error_out ()
+                  | ("main",_,_)::[] -> `Return ((s, path), Hashtbl.find regs r)
+                  | _::[] -> error_out ()
+                  | _ ->
+                    let (id, pc, r1), (id2, pc2, r2), s' = 
+                        (function (x::y::r) -> x, y, r | _ -> error_out ()) s in
+                    let r2' = Hashtbl.copy r2 in
+                    let n1 = (function (I_call (_, n1, _)) -> n1 | _ -> error_out ())
+                             (Array.get (Hashtbl.find p id2) pc2) in
+                    let _ = Hashtbl.replace r2' n1 (Hashtbl.find r1 r)
+                    in `Normal ((id2, pc2 + 1, r2')::s', path))  
+            | I_int_sym (`L_Reg r, s) ->
+                let b = sym_var s in
+                let _ = Hashtbl.replace regs r (`L_Sym (List.map normalize b)) in
+                `Normal ((cid, 1 + cpc, regs)::rest, path)
+            | I_assert_zero (`L_Reg r) -> 
+                (match (Hashtbl.find regs r) with
+                    | `L_Int 0 -> `Normal ((cid, 1 + cpc, regs)::rest, path)
+                    | `L_Sym x ->
+                        let zp = normalize (EAnd (path, (ENot (Bvec.zero x))))
+                        in (match (Boolean.sat zp) with
+                              | Some _ -> `Failure path
+                              | None   -> `Normal ((cid, 1 + cpc, regs)::rest, path))
+                    | _ -> `Failure path)))
+
+type scheduler = config * config option * config list -> config list
+
+let sch_with (cs:config * config option * config list) 
+             (sch:config list -> config list -> config list):config list =
+    (match cs with (c, None,    l) -> sch [c]    l
+                 | (c, Some c', l) -> sch [c;c'] l)
+
+let sch_dfs cs = sch_with cs (fun res prev -> res  @ prev)
+let sch_bfs cs = sch_with cs (fun res prev -> prev @ res)
+
+let default = (function (Some x), _ -> x | None, x -> x)
+                       
+let run_prog (p:prog) (sch:scheduler) (max_steps:int):prog_ret list = 
+    let i_conf = ([("main",0,(Hashtbl.create 1738))],ETrue) in
+    let i_schdg = sch (i_conf, None, []) in
+    let rec prog_loop xs i a =
+        (match xs with
+          | [] -> a
+          | (c::cs) ->
+            let n, path = (function (((x, _, _)::_), y) -> (x,y) | _ -> error_out ()) c in
+            if i > max_steps then (`Partial path)::a else
+            (match (run_inst p c) with
+                   `Return ((_, p'), v) -> prog_loop cs                       (i + 1) ((`Full (v, p'))::a)
+                 | `Normal c'           -> prog_loop (sch (c', None,     cs)) (i + 1) a
+                 | `Branch (c', c'')    -> prog_loop (sch (c', Some c'', cs)) (i + 1) a 
+                 | `Failure b           -> prog_loop cs                       (i + 1) ((`Failure b)::a)))
+    in prog_loop i_schdg 0 []
